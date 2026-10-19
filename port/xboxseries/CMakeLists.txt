@@ -7,6 +7,7 @@ endif()
 project(OpenCEUWP LANGUAGES C CXX ASM_MASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
 get_filename_component(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 set(UWP_DEPS "C:/bsuwp/_deps/uwpdep-src" CACHE PATH "libuwp/Mesa/zlib UWP bundle")

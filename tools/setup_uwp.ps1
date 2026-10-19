@@ -86,3 +86,27 @@ if (-not (Test-Path -LiteralPath (Join-Path $imgui 'imgui.cpp'))) {
     & git clone --depth 1 --branch v1.91.9b https://github.com/ocornut/imgui.git $imgui
     if ($LASTEXITCODE) { throw 'Dear ImGui clone failed.' }
 }
+
+$glDir = Join-Path $deps 'gl-headers'
+if (-not (Test-Path -LiteralPath (Join-Path $glDir 'api\GLES3\gl32.h'))) {
+    Write-Output "Fetching Khronos GLES and EGL headers..."
+    New-Item -ItemType Directory -Path $glDir -Force | Out-Null
+    $glRepo = Join-Path $deps 'gl-headers-repo'
+    if (-not (Test-Path -LiteralPath $glRepo)) {
+        & git clone --filter=blob:none --no-checkout https://github.com/KhronosGroup/OpenGL-Registry.git $glRepo
+        if ($LASTEXITCODE) { throw 'OpenGL-Registry clone failed.' }
+        & git -C $glRepo sparse-checkout set api/GLES2 api/GLES3
+        & git -C $glRepo checkout 6af574a14089ccfee87efe230ebcdd8742859813
+    }
+    $eglRepo = Join-Path $deps 'egl-headers-repo'
+    if (-not (Test-Path -LiteralPath $eglRepo)) {
+        & git clone --filter=blob:none --no-checkout https://github.com/KhronosGroup/EGL-Registry.git $eglRepo
+        if ($LASTEXITCODE) { throw 'EGL-Registry clone failed.' }
+        & git -C $eglRepo sparse-checkout set api/KHR
+        & git -C $eglRepo checkout db3425b8246136faccb5e2782b5694960bd6edf1
+    }
+    New-Item -ItemType Directory -Path (Join-Path $glDir 'api') -Force | Out-Null
+    Copy-Item -Recurse (Join-Path $glRepo 'api\*') (Join-Path $glDir 'api') -Force
+    Copy-Item -Recurse (Join-Path $eglRepo 'api\KHR') (Join-Path $glDir 'api\KHR') -Force
+    Write-Output "GLES headers installed to $glDir\api"
+}

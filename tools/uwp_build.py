@@ -44,6 +44,10 @@ def _find_gles_headers() -> Path | None:
     configured = os.environ.get("HALO_XBOX_GLES_INCLUDE")
     candidates = [Path(configured)] if configured else []
     candidates += [
+        Path("build/uwp-deps/gl-headers/api"),
+        Path("build/uwp-deps/gl-headers"),
+        Path("gl-headers/api"),
+        Path("gl-headers"),
         Path("C:/bsuwp/libultraship/vcpkg/installed/x64-windows-static/include"),
         Path("C:/vcpkg/installed/x64-windows/include"),
     ]

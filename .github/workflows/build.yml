@@ -37,6 +37,8 @@ on:
   push:
     branches:
       - main
+      - UWP-XB1
+      - UWP-Port
       - "release-*"
       - "release/**"
     tags:

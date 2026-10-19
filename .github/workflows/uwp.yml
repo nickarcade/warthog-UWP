@@ -1,0 +1,117 @@
+name: Warthog UWP Build
+
+on:
+  push:
+    branches:
+      - main
+      - UWP-XB1
+      - UWP-Port
+      - "release-*"
+      - "release/**"
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: "Configuration to compile"
+        type: choice
+        options:
+          - both
+          - debug
+          - release
+        default: both
+
+concurrency:
+  group: uwp-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-uwp:
+    name: Build UWP (${{ matrix.configuration }})
+    runs-on: windows-2025
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - name: Check configuration gate
+        id: check_config
+        shell: pwsh
+        run: |
+          $inputConfig = '${{ inputs.configuration }}'
+          if ($inputConfig -and $inputConfig -ne 'both' -and $inputConfig.ToLower() -ne '${{ matrix.configuration }}'.ToLower()) {
+            echo "skip=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "skip=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Checkout repository
+        if: steps.check_config.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Ninja build tool
+        if: steps.check_config.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $tools = Join-Path $env:RUNNER_TEMP 'tools'
+          New-Item -ItemType Directory -Path $tools -Force | Out-Null
+          Invoke-WebRequest -OutFile ninja.zip https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
+          Expand-Archive ninja.zip -DestinationPath $tools
+          Remove-Item ninja.zip
+          $tools | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Cache UWP dependencies
+        if: steps.check_config.outputs.skip != 'true'
+        uses: actions/cache@v4
+        id: cache-uwp-deps
+        with:
+          path: |
+            uwp-deps
+            build/uwp-deps
+          key: uwp-deps-v1-${{ hashFiles('tools/setup_uwp.ps1', 'port/xboxseries/sdl3/wasapi-winrt.patch') }}
+
+      - name: Fetch UWP dependencies (uwp-dep)
+        if: steps.check_config.outputs.skip != 'true' && steps.cache-uwp-deps.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          git clone --filter=blob:none --branch pd https://github.com/worleydl/uwp-dep.git uwp-deps
+          git -C uwp-deps checkout --detach 3960693ee292522a5bcb58bc7d4136a0bb8864af
+
+      - name: Setup UWP prerequisites (SDL3, GLES headers, ImGui)
+        if: steps.check_config.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          .\tools\setup_uwp.ps1 -Jobs 4
+
+      - name: Compile Guest and Host (${{ matrix.configuration }})
+        if: steps.check_config.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $uwpDepsPath = (Resolve-Path uwp-deps).Path
+          .\tools\build.ps1 -UwpDeps $uwpDepsPath -Configuration ${{ matrix.configuration }} -Jobs 4
+
+      - name: Package and Sign APPX (${{ matrix.configuration }})
+        if: steps.check_config.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $dist = "dist\uwp-${{ matrix.configuration }}"
+          .\tools\make_release.ps1 -Configuration ${{ matrix.configuration }} -OutputDirectory $dist
+
+      - name: Upload Artifacts (${{ matrix.configuration }})
+        if: steps.check_config.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Warthog-UWP-${{ matrix.configuration }}-x64
+          path: dist/uwp-${{ matrix.configuration }}
+          retention-days: 7
